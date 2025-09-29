@@ -8,7 +8,6 @@ import { db } from "./firebase-config";
 import {
   collection,
   addDoc,
-  getDocs,
   setDoc,
   doc,
   onSnapshot,
@@ -17,7 +16,6 @@ import {
 
 function App() {
   const [data, setData] = useState([]);
-  const [archivedData, setArchivedData] = useState([]);
   const [form, setForm] = useState({
     nama: "",
     jabatan: "",
@@ -39,9 +37,9 @@ function App() {
   const [adminPass, setAdminPass] = useState("");
   const [exportDate, setExportDate] = useState("");
 
-  const ADMIN_PASSWORD = "admin123"; // bisa diubah
+  const ADMIN_PASSWORD = "admin123"; // ganti sesuai kebutuhan
 
-  // Collection Firestore
+  // Firestore
   const piketRef = collection(db, "piketData");
   const settingsRef = doc(db, "settings", "current");
 
@@ -83,7 +81,7 @@ function App() {
     "Cuti",
   ];
 
-  // 🔥 Ambil data dari Firestore realtime
+  // 🔥 Ambil data realtime dari Firestore
   useEffect(() => {
     const unsubData = onSnapshot(piketRef, (snapshot) => {
       setData(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
@@ -112,7 +110,7 @@ function App() {
     };
   }, []);
 
-  // 🔥 Simpan form
+  // 🔥 Simpan form kehadiran
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!date) {
@@ -133,14 +131,14 @@ function App() {
     });
   };
 
-  // 🔥 Update petugas piket (langsung tersimpan di Firestore)
+  // 🔥 Update petugas piket
   const handleNamaPiketChange = async (index, value) => {
     const newPetugas = [...petugasPiket];
     newPetugas[index].nama = value;
     newPetugas[index].waktu = value ? new Date().toLocaleTimeString() : "";
     setPetugasPiket(newPetugas);
 
-    await updateDoc(settingsRef, { petugasPiket: newPetugas });
+    await updateDoc(settingsRef, { petugasPiket: newPetugas, day, date });
   };
 
   // 🔥 Admin login
@@ -154,27 +152,7 @@ function App() {
     }
   };
 
-  // 🔥 Reset tanggal
-  const handleResetTanggal = async () => {
-    if (!isAdmin) return;
-    if (
-      !window.confirm(
-        "Apakah Anda yakin ingin reset tanggal? Data lama akan diarsipkan."
-      )
-    )
-      return;
-
-    setArchivedData([...archivedData, ...data]);
-
-    // Kosongkan koleksi
-    for (let d of data) {
-      await updateDoc(doc(db, "piketData", d.id), { archived: true });
-    }
-
-    await setDoc(settingsRef, { day: "", date: "", petugasPiket: [] });
-  };
-
-  // 🔥 Export ke Excel
+  // 🔥 Export Excel
   const handleExportFlexible = (type) => {
     let exportData = [];
 
@@ -218,11 +196,12 @@ function App() {
     <div className="p-5">
       <h1>Aplikasi Monitoring Piket Harian DISDIKBUD</h1>
 
-      {/* Hari & Pencarian */}
+      {/* Bagian atas: Hari/Tanggal (kiri), Cari Nama + Login (kanan) */}
       <div
         style={{
           display: "flex",
           justifyContent: "space-between",
+          alignItems: "flex-start",
           marginBottom: "20px",
         }}
       >
@@ -258,14 +237,25 @@ function App() {
           )}
         </div>
 
-        <div>
+        <div style={{ textAlign: "right" }}>
           <input
             type="text"
             placeholder="Cari Nama..."
             value={searchName}
             onChange={(e) => setSearchName(e.target.value)}
-            style={{ padding: "5px" }}
+            style={{ padding: "5px", marginRight: "10px" }}
           />
+          {!isAdmin ? (
+            <>
+              <input
+                type="password"
+                placeholder="Password Admin"
+                value={adminPass}
+                onChange={(e) => setAdminPass(e.target.value)}
+              />
+              <button onClick={handleAdminLogin}>Login Admin</button>
+            </>
+          ) : null}
         </div>
       </div>
 
@@ -294,7 +284,7 @@ function App() {
         </tbody>
       </table>
 
-      {/* Form Input */}
+      {/* Form Input Kehadiran */}
       <form onSubmit={handleSubmit} style={{ marginBottom: "20px" }}>
         <input
           name="nama"
@@ -361,7 +351,7 @@ function App() {
         <button type="submit">Simpan</button>
       </form>
 
-      {/* Tabel Data */}
+      {/* Tabel Data Kehadiran */}
       <table border="1" cellPadding="5" width="100%">
         <thead style={{ backgroundColor: "lightyellow" }}>
           <tr>
@@ -406,60 +396,47 @@ function App() {
         </tbody>
       </table>
 
-      <div
-        style={{
-          textAlign: "center",
-          marginTop: "20px",
-          fontStyle: "italic",
-          color: "#444",
-        }}
-      >
-        Selamat Menikmati Hari Kerjamu ^_^
-      </div>
+      {/* Export Excel - di bawah tabel */}
+      {isAdmin && (
+        <div style={{ marginTop: "20px" }}>
+          <button onClick={() => handleExportFlexible("active")}>
+            Export Tanggal Aktif
+          </button>
+          <select
+            value={exportDate}
+            onChange={(e) => setExportDate(e.target.value)}
+          >
+            <option value="">-- Pilih Tanggal --</option>
+            {uniqueDates.map((d, i) => (
+              <option key={i} value={d}>
+                {d}
+              </option>
+            ))}
+          </select>
+          <button onClick={() => handleExportFlexible("byDate")}>
+            Export Tanggal Tertentu
+          </button>
+          <button onClick={() => handleExportFlexible("all")}>
+            Export Semua Data
+          </button>
+        </div>
+      )}
 
-      {/* Admin */}
-      <div style={{ marginTop: "20px", textAlign: "center" }}>
-        {!isAdmin ? (
-          <>
-            <input
-              type="password"
-              placeholder="Password Admin"
-              value={adminPass}
-              onChange={(e) => setAdminPass(e.target.value)}
-            />
-            <button onClick={handleAdminLogin}>Login Admin</button>
-          </>
-        ) : (
-          <div>
-            <button onClick={() => handleExportFlexible("active")}>
-              Export Tanggal Aktif
-            </button>
-            <select
-              value={exportDate}
-              onChange={(e) => setExportDate(e.target.value)}
-            >
-              <option value="">-- Pilih Tanggal --</option>
-              {uniqueDates.map((d, i) => (
-                <option key={i} value={d}>
-                  {d}
-                </option>
-              ))}
-            </select>
-            <button onClick={() => handleExportFlexible("byDate")}>
-              Export Tanggal Tertentu
-            </button>
-            <button onClick={() => handleExportFlexible("all")}>
-              Export Semua Data
-            </button>
-            <button
-              style={{ marginLeft: "10px", backgroundColor: "red", color: "white" }}
-              onClick={handleResetTanggal}
-            >
-              Reset Tanggal & Arsipkan Data
-            </button>
-          </div>
-        )}
-      </div>
+      {/* Pesan setelah login admin */}
+      {isAdmin && (
+        <div
+          style={{
+            textAlign: "center",
+            marginTop: "20px",
+            fontStyle: "italic",
+            fontWeight: "bold",
+            fontSize: "18px",
+            color: "#444",
+          }}
+        >
+          SELAMAT MENIKMATI HARI KERJAMU ^_^
+        </div>
+      )}
 
       {/* Footer */}
       <div
@@ -470,7 +447,7 @@ function App() {
           color: "gray",
         }}
       >
-        Made by: <b>G.N.Patrouw</b>
+        Made By: <b>G.N.Patrouw</b>
       </div>
     </div>
   );
