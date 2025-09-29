@@ -24,8 +24,10 @@ function App() {
     khusus: "",
   });
 
-  const [day, setDay] = useState("");
-  const [date, setDate] = useState("");
+  // 🔥 Ambil dari localStorage biar tidak hilang saat refresh
+  const [day, setDay] = useState(localStorage.getItem("day") || "");
+  const [date, setDate] = useState(localStorage.getItem("date") || "");
+
   const [petugasPiket, setPetugasPiket] = useState([
     { nama: "", waktu: "" },
     { nama: "", waktu: "" },
@@ -80,6 +82,15 @@ function App() {
     "Turun Lapangan",
     "Cuti",
   ];
+
+  // 🔥 Simpan day & date ke localStorage setiap kali berubah
+  useEffect(() => {
+    if (day) localStorage.setItem("day", day);
+  }, [day]);
+
+  useEffect(() => {
+    if (date) localStorage.setItem("date", date);
+  }, [date]);
 
   // 🔥 Ambil data realtime dari Firestore
   useEffect(() => {
