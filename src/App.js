@@ -11,7 +11,6 @@ import {
   setDoc,
   doc,
   onSnapshot,
-  updateDoc,
 } from "firebase/firestore";
 
 function App() {
@@ -24,9 +23,8 @@ function App() {
     khusus: "",
   });
 
-  // 🔥 Ambil dari localStorage biar tidak hilang saat refresh
-  const [day, setDay] = useState(localStorage.getItem("day") || "");
-  const [date, setDate] = useState(localStorage.getItem("date") || "");
+  const [day, setDay] = useState("");
+  const [date, setDate] = useState("");
 
   const [petugasPiket, setPetugasPiket] = useState([
     { nama: "", waktu: "" },
@@ -39,11 +37,12 @@ function App() {
   const [adminPass, setAdminPass] = useState("");
   const [exportDate, setExportDate] = useState("");
 
-  const ADMIN_PASSWORD = "admin123"; // ganti sesuai kebutuhan
+  const ADMIN_PASSWORD = "admin123";
 
-  // Firestore
+  // Firestore reference
   const piketRef = collection(db, "piketData");
   const settingsRef = (date) => doc(db, "settings", date || "default");
+  const activeDateRef = doc(db, "settings", "activeDate");
 
   const jabatanOptions = [
     "Kepala Dinas DISDIKBUD",
@@ -83,14 +82,19 @@ function App() {
     "Cuti",
   ];
 
-  // 🔥 Simpan day & date ke localStorage setiap kali berubah
+  // 🔥 Sync tanggal aktif dari Firestore (semua perangkat ikut)
   useEffect(() => {
-    if (day) localStorage.setItem("day", day);
-  }, [day]);
-
-  useEffect(() => {
-    if (date) localStorage.setItem("date", date);
-  }, [date]);
+    const unsub = onSnapshot(activeDateRef, (snap) => {
+      if (snap.exists()) {
+        const { day, date } = snap.data();
+        setDay(day || "");
+        setDate(date || "");
+        localStorage.setItem("day", day || "");
+        localStorage.setItem("date", date || "");
+      }
+    });
+    return () => unsub();
+  }, []);
 
   // 🔥 Ambil data realtime dari Firestore
   useEffect(() => {
@@ -100,14 +104,13 @@ function App() {
     return () => unsubData();
   }, []);
 
-  // 🔥 Ambil data settings sesuai tanggal
+  // 🔥 Ambil data settings (petugas piket) sesuai tanggal
   useEffect(() => {
     if (!date) return;
 
     const unsubSettings = onSnapshot(settingsRef(date), (docSnap) => {
       if (docSnap.exists()) {
         const s = docSnap.data();
-        setDay(s.day || "");
         setPetugasPiket(
           s.petugasPiket && s.petugasPiket.length === 3
             ? s.petugasPiket
@@ -118,7 +121,6 @@ function App() {
               ]
         );
       } else {
-        // kalau belum ada data untuk tanggal tsb → kosong
         setPetugasPiket([
           { nama: "", waktu: "" },
           { nama: "", waktu: "" },
@@ -172,6 +174,17 @@ function App() {
     } else {
       alert("Password Salah!");
     }
+  };
+
+  // 🔥 Simpan tanggal aktif ke Firestore (bukan hanya local)
+  const handleSaveTanggal = async () => {
+    if (!date) {
+      alert("Tanggal harus dipilih!");
+      return;
+    }
+    await setDoc(activeDateRef, { day, date });
+    await setDoc(settingsRef(date), { day, date, petugasPiket });
+    alert("Tanggal aktif berhasil diperbarui untuk semua perangkat!");
   };
 
   // 🔥 Export Excel
@@ -249,13 +262,7 @@ function App() {
             />
           </label>
           {isAdmin && (
-            <button
-              onClick={async () =>
-                await setDoc(settingsRef(date), { day, date, petugasPiket })
-              }
-            >
-              Simpan Hari & Tanggal
-            </button>
+            <button onClick={handleSaveTanggal}>Simpan Hari & Tanggal</button>
           )}
         </div>
 
@@ -298,6 +305,7 @@ function App() {
                   value={p.nama}
                   onChange={(e) => handleNamaPiketChange(i, e.target.value)}
                   placeholder={`Petugas ${i + 1}`}
+                  disabled={!isAdmin}
                 />
               </td>
               <td>{p.waktu}</td>
@@ -418,7 +426,7 @@ function App() {
         </tbody>
       </table>
 
-      {/* Export Excel - di bawah tabel */}
+      {/* Export Excel */}
       {isAdmin && (
         <div style={{ marginTop: "20px" }}>
           <button onClick={() => handleExportFlexible("active")}>
@@ -444,7 +452,6 @@ function App() {
         </div>
       )}
 
-      {/* Pesan setelah login admin */}
       {isAdmin && (
         <div
           style={{
@@ -460,7 +467,6 @@ function App() {
         </div>
       )}
 
-      {/* Footer */}
       <div
         style={{
           marginTop: "30px",
