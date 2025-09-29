@@ -41,7 +41,7 @@ function App() {
 
   // Firestore
   const piketRef = collection(db, "piketData");
-  const settingsRef = doc(db, "settings", "current");
+  const settingsRef = (date) => doc(db, "settings", date || "default");
 
   const jabatanOptions = [
     "Kepala Dinas DISDIKBUD",
@@ -86,12 +86,17 @@ function App() {
     const unsubData = onSnapshot(piketRef, (snapshot) => {
       setData(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
     });
+    return () => unsubData();
+  }, []);
 
-    const unsubSettings = onSnapshot(settingsRef, (docSnap) => {
+  // 🔥 Ambil data settings sesuai tanggal
+  useEffect(() => {
+    if (!date) return;
+
+    const unsubSettings = onSnapshot(settingsRef(date), (docSnap) => {
       if (docSnap.exists()) {
         const s = docSnap.data();
         setDay(s.day || "");
-        setDate(s.date || "");
         setPetugasPiket(
           s.petugasPiket && s.petugasPiket.length === 3
             ? s.petugasPiket
@@ -101,14 +106,18 @@ function App() {
                 { nama: "", waktu: "" },
               ]
         );
+      } else {
+        // kalau belum ada data untuk tanggal tsb → kosong
+        setPetugasPiket([
+          { nama: "", waktu: "" },
+          { nama: "", waktu: "" },
+          { nama: "", waktu: "" },
+        ]);
       }
     });
 
-    return () => {
-      unsubData();
-      unsubSettings();
-    };
-  }, []);
+    return () => unsubSettings();
+  }, [date]);
 
   // 🔥 Simpan form kehadiran
   const handleSubmit = async (e) => {
@@ -138,7 +147,9 @@ function App() {
     newPetugas[index].waktu = value ? new Date().toLocaleTimeString() : "";
     setPetugasPiket(newPetugas);
 
-    await updateDoc(settingsRef, { petugasPiket: newPetugas, day, date });
+    if (date) {
+      await setDoc(settingsRef(date), { day, date, petugasPiket: newPetugas });
+    }
   };
 
   // 🔥 Admin login
@@ -229,7 +240,7 @@ function App() {
           {isAdmin && (
             <button
               onClick={async () =>
-                await setDoc(settingsRef, { day, date, petugasPiket })
+                await setDoc(settingsRef(date), { day, date, petugasPiket })
               }
             >
               Simpan Hari & Tanggal
