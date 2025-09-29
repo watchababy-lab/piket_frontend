@@ -221,9 +221,11 @@ function App() {
     saveAs(blob, `Data_Piket_Export.xlsx`);
   };
 
+  // 🔥 Filter + urutkan data terbaru di atas
   const filteredData = data
     .filter((d) => d.tanggal === date)
-    .filter((d) => d.nama.toLowerCase().includes(searchName.toLowerCase()));
+    .filter((d) => d.nama.toLowerCase().includes(searchName.toLowerCase()))
+    .sort((a, b) => new Date(b.waktu) - new Date(a.waktu));
 
   const uniqueDates = Array.from(new Set(data.map((d) => d.tanggal))).sort();
 
